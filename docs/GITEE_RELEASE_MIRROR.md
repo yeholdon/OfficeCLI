@@ -5,10 +5,9 @@ OfficeCLI release binaries are mirrored from GitHub to:
 <https://gitee.com/yeholdon/OfficeCLI/releases>
 
 The GitHub workflow `.github/workflows/mirror-gitee-release.yml` runs whenever
-a GitHub release is published. It also runs when its own workflow or scripts
-change, polls `iOfficeAI/OfficeCLI` hourly, and supports manually mirroring a
-specific tag. The polling path means the workflow can run from a fork whose
-owner cannot manage secrets in the upstream project.
+a GitHub release is published. It also polls `iOfficeAI/OfficeCLI` hourly and
+supports manually mirroring a specific tag. The polling path means the workflow
+can run from a fork whose owner cannot manage secrets in the upstream project.
 
 ## Repository setup
 

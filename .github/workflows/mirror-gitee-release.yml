@@ -1,11 +1,6 @@
 name: Mirror release to Gitee
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/mirror-gitee-release.yml'
-      - '.github/scripts/sync-gitee-*.sh'
   release:
     types: [published]
   schedule:
@@ -20,12 +15,11 @@ on:
         type: string
 
 permissions:
-  actions: write
   contents: read
 
 concurrency:
   group: mirror-gitee-release
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   mirror:
@@ -37,13 +31,6 @@ jobs:
       GITEE_OWNER: yeholdon
       GITEE_REPO: OfficeCLI
     steps:
-      - name: Cancel superseded pre-lock run
-        shell: bash
-        run: |
-          for run_id in 33735081527 33735639006 33735914477; do
-            gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
-          done
-
       - name: Check out mirror tooling
         uses: actions/checkout@v5
 
