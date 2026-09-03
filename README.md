@@ -76,7 +76,7 @@ That's it. The skill file teaches the agent how to install the binary and use al
 
 **Option A — GUI:** Install [**AionUi**](https://github.com/iOfficeAI/AionUi) — a desktop app that lets you create and edit Office documents through natural language, powered by OfficeCLI under the hood. Just describe what you want, and AionUi handles the rest.
 
-**Option B — CLI:** Download the binary for your platform from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases), then run:
+**Option B — CLI:** Download the binary for your platform from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases) or the [Gitee mirror](https://gitee.com/yeholdon/OfficeCLI/releases), then run:
 
 ```bash
 officecli install
@@ -226,7 +226,7 @@ scoop install officecli
 npm install -g @officecli/officecli
 ```
 
-**Or download manually** from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases):
+**Or download manually** from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases). Users in mainland China can use the [Gitee release mirror](https://gitee.com/yeholdon/OfficeCLI/releases):
 
 | Platform | Binary |
 |----------|--------|

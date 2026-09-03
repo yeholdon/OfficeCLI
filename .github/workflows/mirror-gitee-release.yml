@@ -1,0 +1,64 @@
+name: Mirror release to Gitee
+
+on:
+  release:
+    types: [published]
+  schedule:
+    # A fork does not receive upstream release events, so poll the source hourly.
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to mirror, or latest'
+        required: true
+        default: latest
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-gitee-release
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_GITHUB_REPOSITORY: iOfficeAI/OfficeCLI
+      GITEE_OWNER: yeholdon
+      GITEE_REPO: OfficeCLI
+    steps:
+      - name: Check out mirror tooling
+        uses: actions/checkout@v5
+
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$EVENT_TAG" ]; then
+            tag="$EVENT_TAG"
+          elif [ -n "$INPUT_TAG" ]; then
+            tag="$INPUT_TAG"
+          else
+            tag=latest
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Mirror release tag to Gitee
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USERNAME: yeholdon
+        run: bash .github/scripts/sync-gitee-tag.sh '${{ steps.release.outputs.tag }}'
+
+      - name: Mirror release and attachments
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: bash .github/scripts/sync-gitee-release.sh '${{ steps.release.outputs.tag }}'
