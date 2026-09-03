@@ -1,6 +1,11 @@
 name: Mirror release to Gitee
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mirror-gitee-release.yml'
+      - '.github/scripts/sync-gitee-*.sh'
   release:
     types: [published]
   schedule:
