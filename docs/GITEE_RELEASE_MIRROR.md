@@ -37,7 +37,9 @@ workflow**. Keep `latest` to mirror the current release, or enter a tag such as
 
 The synchronization is idempotent: an existing Gitee release is reused and
 attachments already present under the same name are skipped. GitHub assets are
-verified against `SHA256SUMS` before they are uploaded.
+verified against `SHA256SUMS` before they are uploaded. The checksum manifest is
+published first, then at most two platform binaries are transferred in parallel.
+A final job verifies that every upstream attachment exists on Gitee.
 
 To validate GitHub asset download, checksum verification, and size checks
 without contacting Gitee, run:

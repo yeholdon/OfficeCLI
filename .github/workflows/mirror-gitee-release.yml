@@ -1,6 +1,11 @@
 name: Mirror release to Gitee
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mirror-gitee-release.yml'
+      - '.github/scripts/sync-gitee-*.sh'
   release:
     types: [published]
   schedule:
@@ -19,12 +24,14 @@ permissions:
 
 concurrency:
   group: mirror-gitee-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  mirror:
+  prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_GITHUB_REPOSITORY: iOfficeAI/OfficeCLI
@@ -58,10 +65,66 @@ jobs:
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
           GITEE_USERNAME: yeholdon
-        run: bash .github/scripts/sync-gitee-tag.sh '${{ steps.release.outputs.tag }}'
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: bash .github/scripts/sync-gitee-tag.sh "$RELEASE_TAG"
 
-      - name: Mirror release and attachments
+      - name: Create release and mirror checksum manifest
         shell: bash
         env:
           GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
-        run: bash .github/scripts/sync-gitee-release.sh '${{ steps.release.outputs.tag }}'
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: bash .github/scripts/sync-gitee-release.sh "$RELEASE_TAG" SHA256SUMS
+
+  mirror-assets:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        asset:
+          - officecli-linux-alpine-arm64
+          - officecli-linux-alpine-x64
+          - officecli-linux-arm64
+          - officecli-linux-x64
+          - officecli-mac-arm64
+          - officecli-mac-x64
+          - officecli-win-arm64.exe
+          - officecli-win-x64.exe
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_GITHUB_REPOSITORY: iOfficeAI/OfficeCLI
+      GITEE_OWNER: yeholdon
+      GITEE_REPO: OfficeCLI
+    steps:
+      - name: Check out mirror tooling
+        uses: actions/checkout@v5
+
+      - name: Mirror and verify ${{ matrix.asset }}
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_ASSET: ${{ matrix.asset }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: bash .github/scripts/sync-gitee-release.sh "$RELEASE_TAG" "$RELEASE_ASSET"
+
+  verify:
+    needs: [prepare, mirror-assets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_GITHUB_REPOSITORY: iOfficeAI/OfficeCLI
+      GITEE_OWNER: yeholdon
+      GITEE_REPO: OfficeCLI
+    steps:
+      - name: Check out mirror tooling
+        uses: actions/checkout@v5
+
+      - name: Verify complete Gitee release
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: bash .github/scripts/sync-gitee-release.sh "$RELEASE_TAG"

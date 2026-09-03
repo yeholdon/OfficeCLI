@@ -14,6 +14,7 @@ gitee_repository="${GITEE_REPO:-$DEFAULT_GITEE_REPOSITORY}"
 max_asset_bytes="${GITEE_MAX_ASSET_BYTES:-$DEFAULT_MAX_ASSET_BYTES}"
 dry_run="${GITEE_DRY_RUN:-false}"
 requested_tag="${1:-latest}"
+requested_asset="${2:-all}"
 
 die() {
   echo "error: $*" >&2
@@ -46,8 +47,10 @@ release_json="$work_dir/github-release.json"
 release_body="$work_dir/release-body.md"
 gitee_response="$work_dir/gitee-response.json"
 download_list="$work_dir/download-assets.txt"
+sync_list="$work_dir/sync-assets.txt"
 mkdir -p "$assets_dir"
 : >"$download_list"
+: >"$sync_list"
 
 github_api_get() {
   local path="$1"
@@ -103,6 +106,18 @@ while IFS=$'\t' read -r asset_name asset_size; do
   fi
 done < <(jq -r '.assets[] | [.name, .size] | @tsv' "$release_json")
 
+if [[ "$requested_asset" == "all" ]]; then
+  jq -r '.assets[].name' "$release_json" >"$sync_list"
+else
+  [[ -n "$requested_asset" && "$requested_asset" != */* &&
+    "$requested_asset" != "." && "$requested_asset" != ".." ]] ||
+    die "refusing unexpected requested asset name: $requested_asset"
+  jq -e --arg name "$requested_asset" 'any(.assets[]; .name == $name)' \
+    "$release_json" >/dev/null ||
+    die "GitHub release $requested_tag does not contain $requested_asset"
+  printf '%s\n' "$requested_asset" >"$sync_list"
+fi
+
 gitee_request() {
   local method="$1"
   local path="$2"
@@ -156,7 +171,7 @@ gitee_release_exists=false
 gitee_release_id=""
 
 if [[ "$dry_run" == "true" ]]; then
-  jq -r '.assets[].name' "$release_json" >"$download_list"
+  cp "$sync_list" "$download_list"
 else
   release_path="/repos/$gitee_owner/$gitee_repository/releases/tags/$requested_tag"
   status="$(gitee_request GET "$release_path" "$gitee_response")"
@@ -187,21 +202,22 @@ else
     if ! attachment_exists "$asset_name"; then
       printf '%s\n' "$asset_name" >>"$download_list"
     fi
-  done < <(jq -r '.assets[].name' "$release_json")
+  done <"$sync_list"
 
   missing_asset_count="$(wc -l <"$download_list" | tr -d ' ')"
   if (( missing_asset_count == 0 )); then
     echo "Gitee release is already complete:"
-    echo "https://gitee.com/$gitee_owner/$gitee_repository/releases/tag/$requested_tag"
+    echo "https://gitee.com/$gitee_owner/$gitee_repository/releases"
     exit 0
   fi
 
   echo "$missing_asset_count Gitee attachment(s) need synchronization."
-  if ! grep -Fqx -- SHA256SUMS "$download_list"; then
-    # Always fetch the manifest so every downloaded binary is verified, even
-    # when SHA256SUMS itself already exists on Gitee.
-    printf '%s\n' SHA256SUMS >>"$download_list"
-  fi
+fi
+
+if ! grep -Fqx -- SHA256SUMS "$download_list"; then
+  # Always fetch the manifest so every downloaded binary is verified, even
+  # when SHA256SUMS itself already exists on Gitee.
+  printf '%s\n' SHA256SUMS >>"$download_list"
 fi
 
 download_asset() {
@@ -336,9 +352,9 @@ while IFS= read -r asset_name; do
     echo "Missing after upload: $asset_name" >&2
     missing_assets=$((missing_assets + 1))
   fi
-done < <(jq -r '.assets[].name' "$release_json")
+done <"$sync_list"
 
 (( missing_assets == 0 )) || die "$missing_assets Gitee release attachments are missing"
 
 echo "Gitee release mirror is complete:"
-echo "https://gitee.com/$gitee_owner/$gitee_repository/releases/tag/$requested_tag"
+echo "https://gitee.com/$gitee_owner/$gitee_repository/releases"
