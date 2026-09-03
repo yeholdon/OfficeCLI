@@ -107,27 +107,43 @@ gitee_request() {
   local method="$1"
   local path="$2"
   local output="$3"
+  local curl_exit
+  local http_status
   shift 3
 
-  curl --silent --show-error --location \
-    --connect-timeout 30 --max-time 900 \
-    --request "$method" \
-    --header "Authorization: Bearer $GITEE_TOKEN" \
-    --output "$output" \
-    --write-out '%{http_code}' \
-    "$@" \
-    "$GITEE_API_BASE$path"
+  if http_status="$(curl --silent --show-error --location --http1.1 \
+      --connect-timeout 30 --max-time 1800 \
+      --request "$method" \
+      --header "Authorization: Bearer $GITEE_TOKEN" \
+      --output "$output" \
+      --write-out '%{http_code}' \
+      "$@" \
+      "$GITEE_API_BASE$path")"; then
+    printf '%s' "$http_status"
+  else
+    curl_exit=$?
+    echo "warning: Gitee request transport failed (curl exit $curl_exit)" >&2
+    printf '000'
+  fi
 }
 
 attachments_path=""
 
 refresh_attachments() {
+  local attempt
   local status
-  status="$(gitee_request GET "$attachments_path?per_page=100&page=1" "$gitee_response")"
-  [[ "$status" == "200" ]] || {
-    jq -r '.message // .' "$gitee_response" >&2 || true
-    die "could not list Gitee release attachments (HTTP $status)"
-  }
+  for attempt in 1 2 3; do
+    status="$(gitee_request GET "$attachments_path?per_page=100&page=1" "$gitee_response")"
+    if [[ "$status" == "200" ]]; then
+      return 0
+    fi
+    if (( attempt < 3 )); then
+      sleep $((attempt * 2))
+    fi
+  done
+
+  jq -r '.message // .' "$gitee_response" >&2 2>/dev/null || true
+  die "could not list Gitee release attachments (HTTP $status)"
 }
 
 attachment_exists() {
