@@ -24,7 +24,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mirror-gitee-release-${{ inputs.tag || github.event.release.tag_name || 'latest' }}
+  group: mirror-gitee-release
   cancel-in-progress: true
 
 jobs:
@@ -39,7 +39,10 @@ jobs:
     steps:
       - name: Cancel superseded pre-lock run
         shell: bash
-        run: gh run cancel 33735081527 --repo "$GITHUB_REPOSITORY" || true
+        run: |
+          for run_id in 33735081527 33735639006 33735914477; do
+            gh run cancel "$run_id" --repo "$GITHUB_REPOSITORY" || true
+          done
 
       - name: Check out mirror tooling
         uses: actions/checkout@v5
