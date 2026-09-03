@@ -316,8 +316,9 @@ while IFS= read -r -d '' asset_path; do
 
   echo "Uploading: $asset_name"
   uploaded=false
-  for attempt in 1 2 3; do
+  for attempt in 1 2 3 4 5; do
     status="$(gitee_request POST "$attachments_path" "$work_dir/upload-response.json" \
+      --max-time 3600 \
       --form "file=@$asset_path;filename=$asset_name")"
 
     if [[ "$status" =~ ^2 ]]; then
@@ -333,7 +334,7 @@ while IFS= read -r -d '' asset_path; do
       break
     fi
 
-    if (( attempt < 3 )); then
+    if (( attempt < 5 )); then
       sleep $((attempt * 2))
     fi
   done
