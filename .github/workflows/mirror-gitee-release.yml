@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
+      assets: ${{ steps.release.outputs.assets }}
       tag: ${{ steps.release.outputs.tag }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -53,6 +54,15 @@ jobs:
           if [ "$tag" = latest ]; then
             tag="$(gh api "repos/$SOURCE_GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
           fi
+          assets="$(
+            gh api "repos/$SOURCE_GITHUB_REPOSITORY/releases/tags/$tag" |
+              jq -c '[.assets[].name | select(. != "SHA256SUMS")]'
+          )"
+          if [ "$assets" = '[]' ]; then
+            echo 'No binary release assets were found.' >&2
+            exit 1
+          fi
+          echo "assets=$assets" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Mirror release tag to Gitee
@@ -78,15 +88,7 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        asset:
-          - officecli-linux-alpine-arm64
-          - officecli-linux-alpine-x64
-          - officecli-linux-arm64
-          - officecli-linux-x64
-          - officecli-mac-arm64
-          - officecli-mac-x64
-          - officecli-win-arm64.exe
-          - officecli-win-x64.exe
+        asset: ${{ fromJSON(needs.prepare.outputs.assets) }}
     env:
       GH_TOKEN: ${{ github.token }}
       SOURCE_GITHUB_REPOSITORY: iOfficeAI/OfficeCLI
