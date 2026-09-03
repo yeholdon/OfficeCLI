@@ -53,6 +53,9 @@ jobs:
           else
             tag=latest
           fi
+          if [ "$tag" = latest ]; then
+            tag="$(gh api "repos/$SOURCE_GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          fi
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Mirror release tag to Gitee
