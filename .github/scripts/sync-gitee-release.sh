@@ -82,6 +82,9 @@ fi
 
 release_name="$(jq -r '.name // .tag_name' "$release_json")"
 prerelease="$(jq -r '.prerelease' "$release_json")"
+target_commitish="$(jq -r '.target_commitish // "main"' "$release_json")"
+[[ "$target_commitish" =~ ^[0-9A-Za-z][0-9A-Za-z._/-]*$ && "$target_commitish" != *..* ]] ||
+  die "refusing unexpected target_commitish: $target_commitish"
 jq -r '.body // ""' "$release_json" >"$release_body"
 
 expected_asset_count="$(jq '.assets | length' "$release_json")"
@@ -239,23 +242,28 @@ fi
 if [[ "$gitee_release_exists" != "true" ]]; then
   echo "Creating Gitee release $requested_tag..."
   create_path="/repos/$gitee_owner/$gitee_repository/releases"
-  status="$(gitee_request POST "$create_path" "$gitee_response" \
+  create_response="$work_dir/gitee-create-response.json"
+  create_status="$(gitee_request POST "$create_path" "$create_response" \
     --data-urlencode "tag_name=$requested_tag" \
     --data-urlencode "name=$release_name" \
     --data-urlencode "body@$release_body" \
+    --data-urlencode "target_commitish=$target_commitish" \
     --data-urlencode "prerelease=$prerelease")"
 
-  if [[ "$status" =~ ^2 ]]; then
-    gitee_release_id="$(jq -er '.id' "$gitee_response")"
+  if [[ "$create_status" =~ ^2 ]]; then
+    gitee_release_id="$(jq -er '.id' "$create_response")"
   else
     # A lost response may leave a successfully-created release behind. Read it
     # once before failing so a retry remains idempotent.
     status="$(gitee_request GET "$release_path" "$gitee_response")"
-    [[ "$status" == "200" ]] || {
-      jq -r '.message // .' "$gitee_response" >&2 || true
-      die "Gitee release creation failed (HTTP $status)"
-    }
-    gitee_release_id="$(jq -er '.id' "$gitee_response")"
+    if [[ "$status" == "200" ]] &&
+      jq -e 'type == "object" and .id != null' "$gitee_response" >/dev/null; then
+      gitee_release_id="$(jq -er '.id' "$gitee_response")"
+    else
+      create_error="$(jq -r '.message // .error // .' "$create_response" 2>/dev/null || true)"
+      echo "::error title=Gitee release creation failed::HTTP $create_status: $create_error"
+      die "Gitee release creation failed (HTTP $create_status)"
+    fi
   fi
 
   attachments_path="/repos/$gitee_owner/$gitee_repository/releases/$gitee_release_id/attach_files"
