@@ -29,9 +29,19 @@ source_url="https://github.com/$github_repository.git"
 gitee_url="https://gitee.com/$gitee_owner/$gitee_repository.git"
 tag_ref="refs/tags/$requested_tag"
 
-api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+work_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/officecli-gitee-git.XXXXXX")"
+readonly work_dir
+trap 'rm -rf -- "$work_dir"' EXIT
+
+api_error_log="$work_dir/api-error.log"
+if ! api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
   --header "Authorization: Bearer $GITEE_TOKEN" \
-  https://gitee.com/api/v5/user)"
+  https://gitee.com/api/v5/user 2>"$api_error_log")"; then
+  api_error="$(tail -n 1 "$api_error_log")"
+  api_error="${api_error//$GITEE_TOKEN/***}"
+  echo "::error title=Gitee API connection failed::$api_error"
+  die "could not connect to the Gitee API"
+fi
 if [[ "$api_status" != "200" ]]; then
   echo "::error title=Gitee API authentication failed::GITEE_TOKEN was rejected by Gitee (HTTP $api_status). Recreate it with the projects scope."
   die "GITEE_TOKEN was rejected by Gitee (HTTP $api_status)"
@@ -49,11 +59,7 @@ if [[ -n "$gitee_tag_sha" ]]; then
   exit 0
 fi
 
-credential_dir="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/officecli-gitee-git.XXXXXX")"
-readonly credential_dir
-trap 'rm -rf -- "$credential_dir"' EXIT
-
-askpass="$credential_dir/askpass.sh"
+askpass="$work_dir/askpass.sh"
 cat >"$askpass" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
@@ -65,7 +71,7 @@ EOF
 chmod 700 "$askpass"
 
 echo "Pushing source tag $requested_tag to Gitee..."
-push_log="$credential_dir/push.log"
+push_log="$work_dir/push.log"
 if ! GIT_ASKPASS="$askpass" \
   GIT_TERMINAL_PROMPT=0 \
   GITEE_USERNAME="$gitee_username" \
