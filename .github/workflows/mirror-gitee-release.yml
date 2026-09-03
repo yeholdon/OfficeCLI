@@ -23,8 +23,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: mirror-gitee-release
-  cancel-in-progress: false
+  group: mirror-gitee-release-${{ inputs.tag || github.event.release.tag_name || 'latest' }}
+  cancel-in-progress: true
 
 jobs:
   mirror:
