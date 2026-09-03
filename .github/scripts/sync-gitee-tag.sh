@@ -18,6 +18,7 @@ die() {
 }
 
 command -v git >/dev/null 2>&1 || die "required command not found: git"
+command -v curl >/dev/null 2>&1 || die "required command not found: curl"
 [[ -n "${GITEE_TOKEN:-}" ]] || die "GITEE_TOKEN is required"
 [[ "$github_repository" == */* ]] ||
   die "SOURCE_GITHUB_REPOSITORY must have the form owner/repository"
@@ -27,6 +28,14 @@ command -v git >/dev/null 2>&1 || die "required command not found: git"
 source_url="https://github.com/$github_repository.git"
 gitee_url="https://gitee.com/$gitee_owner/$gitee_repository.git"
 tag_ref="refs/tags/$requested_tag"
+
+api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  --header "Authorization: Bearer $GITEE_TOKEN" \
+  https://gitee.com/api/v5/user)"
+if [[ "$api_status" != "200" ]]; then
+  echo "::error title=Gitee API authentication failed::GITEE_TOKEN was rejected by Gitee (HTTP $api_status). Recreate it with the projects scope."
+  die "GITEE_TOKEN was rejected by Gitee (HTTP $api_status)"
+fi
 
 echo "Fetching source tag $requested_tag from $github_repository..."
 git fetch --no-tags "$source_url" "$tag_ref:$tag_ref"
@@ -56,10 +65,17 @@ EOF
 chmod 700 "$askpass"
 
 echo "Pushing source tag $requested_tag to Gitee..."
-GIT_ASKPASS="$askpass" \
-GIT_TERMINAL_PROMPT=0 \
-GITEE_USERNAME="$gitee_username" \
-git -c credential.helper= push "$gitee_url" "$tag_ref:$tag_ref"
+push_log="$credential_dir/push.log"
+if ! GIT_ASKPASS="$askpass" \
+  GIT_TERMINAL_PROMPT=0 \
+  GITEE_USERNAME="$gitee_username" \
+  git -c credential.helper= push "$gitee_url" "$tag_ref:$tag_ref" \
+    2> >(tee "$push_log" >&2); then
+  push_error="$(tail -n 1 "$push_log")"
+  push_error="${push_error//$GITEE_TOKEN/***}"
+  echo "::error title=Gitee Git tag push failed::$push_error"
+  die "could not push Gitee tag $requested_tag"
+fi
 
 gitee_tag_sha="$(git ls-remote --refs "$gitee_url" "$tag_ref" | awk 'NR == 1 { print $1 }')"
 [[ "$gitee_tag_sha" == "$source_tag_sha" ]] ||
