@@ -35,6 +35,7 @@ trap 'rm -rf -- "$work_dir"' EXIT
 
 api_error_log="$work_dir/api-error.log"
 if ! api_status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+  --connect-timeout 30 --max-time 120 \
   --header "Authorization: Bearer $GITEE_TOKEN" \
   https://gitee.com/api/v5/user 2>"$api_error_log")"; then
   api_error="$(tail -n 1 "$api_error_log")"

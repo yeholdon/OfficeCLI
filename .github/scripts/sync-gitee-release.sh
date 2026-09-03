@@ -61,6 +61,7 @@ github_api_get() {
   fi
 
   curl --fail --silent --show-error --location \
+    --connect-timeout 30 --max-time 120 \
     --retry 3 --retry-all-errors \
     "${headers[@]}" \
     "https://api.github.com/$path"
@@ -109,6 +110,7 @@ gitee_request() {
   shift 3
 
   curl --silent --show-error --location \
+    --connect-timeout 30 --max-time 900 \
     --request "$method" \
     --header "Authorization: Bearer $GITEE_TOKEN" \
     --output "$output" \
@@ -194,6 +196,7 @@ download_asset() {
 
   echo "Downloading: $asset_name"
   curl --fail --silent --show-error --location \
+    --connect-timeout 30 --max-time 900 \
     --retry 3 --retry-all-errors \
     --header 'User-Agent: OfficeCLI-Gitee-release-mirror' \
     --output "$assets_dir/$asset_name" \
