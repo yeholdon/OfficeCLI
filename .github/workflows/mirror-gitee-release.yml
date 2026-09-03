@@ -20,6 +20,7 @@ on:
         type: string
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -36,6 +37,10 @@ jobs:
       GITEE_OWNER: yeholdon
       GITEE_REPO: OfficeCLI
     steps:
+      - name: Cancel superseded pre-lock run
+        shell: bash
+        run: gh run cancel 33735081527 --repo "$GITHUB_REPOSITORY" || true
+
       - name: Check out mirror tooling
         uses: actions/checkout@v5
 
