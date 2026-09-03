@@ -142,10 +142,16 @@ else
 
   case "$status" in
     200)
-      gitee_release_exists=true
-      gitee_release_id="$(jq -er '.id' "$gitee_response")"
-      attachments_path="/repos/$gitee_owner/$gitee_repository/releases/$gitee_release_id/attach_files"
-      refresh_attachments
+      # Gitee returns HTTP 200 with a JSON null body when the tag exists but
+      # no Release has been created for it yet.
+      if jq -e 'type == "object" and .id != null' "$gitee_response" >/dev/null; then
+        gitee_release_exists=true
+        gitee_release_id="$(jq -er '.id' "$gitee_response")"
+        attachments_path="/repos/$gitee_owner/$gitee_repository/releases/$gitee_release_id/attach_files"
+        refresh_attachments
+      else
+        jq -n '[]' >"$gitee_response"
+      fi
       ;;
     404)
       jq -n '[]' >"$gitee_response"
