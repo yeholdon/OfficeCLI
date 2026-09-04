@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: mirror-gitee-release-v2
+  group: mirror-gitee-release-v3
   cancel-in-progress: false
 
 jobs:
