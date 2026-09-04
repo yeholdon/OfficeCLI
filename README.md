@@ -226,16 +226,19 @@ scoop install officecli
 npm install -g @officecli/officecli
 ```
 
-**Or download manually** from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases). Users in mainland China can use the [Gitee release mirror](https://gitee.com/yeholdon/OfficeCLI/releases):
+**Or download manually** from [GitHub Releases](https://github.com/iOfficeAI/OfficeCLI/releases). Users in mainland China can use the [Gitee release index](https://gitee.com/yeholdon/OfficeCLI/releases), which includes direct links to the official download mirror:
 
 | Platform | Binary |
 |----------|--------|
-| macOS Apple Silicon | `officecli-mac-arm64` |
-| macOS Intel | `officecli-mac-x64` |
-| Linux x64 | `officecli-linux-x64` |
-| Linux ARM64 | `officecli-linux-arm64` |
-| Windows x64 | `officecli-win-x64.exe` |
-| Windows ARM64 | `officecli-win-arm64.exe` |
+| macOS Apple Silicon | [`officecli-mac-arm64`](https://d.officecli.ai/releases/latest/download/officecli-mac-arm64) |
+| macOS Intel | [`officecli-mac-x64`](https://d.officecli.ai/releases/latest/download/officecli-mac-x64) |
+| Linux x64 | [`officecli-linux-x64`](https://d.officecli.ai/releases/latest/download/officecli-linux-x64) |
+| Linux ARM64 | [`officecli-linux-arm64`](https://d.officecli.ai/releases/latest/download/officecli-linux-arm64) |
+| Windows x64 | [`officecli-win-x64.exe`](https://d.officecli.ai/releases/latest/download/officecli-win-x64.exe) |
+| Windows ARM64 | [`officecli-win-arm64.exe`](https://d.officecli.ai/releases/latest/download/officecli-win-arm64.exe) |
+
+Gitee's security scanner rejects the raw Windows executables, so each Gitee
+release links those files from the official `d.officecli.ai` mirror instead.
 
 Verify installation: `officecli --version`
 

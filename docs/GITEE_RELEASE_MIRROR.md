@@ -1,6 +1,7 @@
 # Gitee release mirror
 
-OfficeCLI release binaries are mirrored from GitHub to:
+OfficeCLI release metadata, checksums, and non-Windows binaries are mirrored
+from GitHub to:
 
 <https://gitee.com/yeholdon/OfficeCLI/releases>
 
@@ -39,7 +40,14 @@ The synchronization is idempotent: an existing Gitee release is reused and
 attachments already present under the same name are skipped. GitHub assets are
 verified against `SHA256SUMS` before they are uploaded. The checksum manifest is
 published first, then at most two platform binaries are transferred in parallel.
-A final job verifies that every upstream attachment exists on Gitee.
+A final job verifies every Gitee attachment and external mirror target.
+
+Gitee's security scanner rejects the raw Windows executables. Those two files
+remain on OfficeCLI's official download mirror, `https://d.officecli.ai`, which
+the project's installers and self-updater already use as their primary source.
+Each Gitee release description contains direct, versioned links to every asset
+on that mirror. Gitee stores the checksum manifest plus the macOS and Linux
+binaries; the workflow verifies that both Windows mirror URLs are available.
 
 To validate GitHub asset download, checksum verification, and size checks
 without contacting Gitee, run:

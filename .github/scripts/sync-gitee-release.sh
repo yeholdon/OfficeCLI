@@ -7,11 +7,14 @@ readonly DEFAULT_GITHUB_REPOSITORY="iOfficeAI/OfficeCLI"
 readonly DEFAULT_GITEE_OWNER="yeholdon"
 readonly DEFAULT_GITEE_REPOSITORY="OfficeCLI"
 readonly DEFAULT_MAX_ASSET_BYTES=$((50 * 1024 * 1024))
+readonly DEFAULT_DOWNLOAD_MIRROR_BASE="https://d.officecli.ai"
 
 github_repository="${SOURCE_GITHUB_REPOSITORY:-${GITHUB_REPOSITORY:-$DEFAULT_GITHUB_REPOSITORY}}"
 gitee_owner="${GITEE_OWNER:-$DEFAULT_GITEE_OWNER}"
 gitee_repository="${GITEE_REPO:-$DEFAULT_GITEE_REPOSITORY}"
 max_asset_bytes="${GITEE_MAX_ASSET_BYTES:-$DEFAULT_MAX_ASSET_BYTES}"
+download_mirror_base="${DOWNLOAD_MIRROR_BASE:-$DEFAULT_DOWNLOAD_MIRROR_BASE}"
+download_mirror_base="${download_mirror_base%/}"
 dry_run="${GITEE_DRY_RUN:-false}"
 requested_tag="${1:-latest}"
 requested_asset="${2:-all}"
@@ -45,6 +48,7 @@ trap 'rm -rf -- "$work_dir"' EXIT
 assets_dir="$work_dir/assets"
 release_json="$work_dir/github-release.json"
 release_body="$work_dir/release-body.md"
+gitee_release_body="$work_dir/gitee-release-body.md"
 gitee_response="$work_dir/gitee-response.json"
 download_list="$work_dir/download-assets.txt"
 sync_list="$work_dir/sync-assets.txt"
@@ -91,6 +95,16 @@ target_commitish="$(jq -r '.target_commitish // "main"' "$release_json")"
   die "refusing unexpected target_commitish: $target_commitish"
 jq -r '.body // ""' "$release_json" >"$release_body"
 
+{
+  cat "$release_body"
+  printf '\n\n---\n\n## 官方高速下载镜像\n\n'
+  printf '下列文件由 OfficeCLI 官方镜像提供；下载后请使用本发行版的 `SHA256SUMS` 校验。\n\n'
+  jq -r --arg base "$download_mirror_base" --arg tag "$requested_tag" '
+    .assets[].name |
+    "- [`\(.)`](\($base)/releases/download/\($tag)/\(. | @uri))"
+  ' "$release_json"
+} >"$gitee_release_body"
+
 expected_asset_count="$(jq '.assets | length' "$release_json")"
 (( expected_asset_count > 0 )) || die "GitHub release $requested_tag has no uploaded assets"
 jq -e 'any(.assets[]; .name == "SHA256SUMS")' "$release_json" >/dev/null ||
@@ -101,7 +115,7 @@ jq -e 'any(.assets[]; .name == "SHA256SUMS")' "$release_json" >/dev/null ||
 while IFS=$'\t' read -r asset_name asset_size; do
   [[ -n "$asset_name" && "$asset_name" != */* && "$asset_name" != "." && "$asset_name" != ".." ]] ||
     die "refusing unexpected GitHub asset name: $asset_name"
-  if (( asset_size > max_asset_bytes )); then
+  if [[ "$asset_name" != *.exe ]] && (( asset_size > max_asset_bytes )); then
     die "$asset_name is $asset_size bytes; Gitee mirror limit is $max_asset_bytes bytes"
   fi
 done < <(jq -r '.assets[] | [.name, .size] | @tsv' "$release_json")
@@ -167,6 +181,25 @@ attachment_exists() {
     "$gitee_response" >/dev/null
 }
 
+is_download_mirror_only_asset() {
+  local asset_name="$1"
+  [[ "$asset_name" == *.exe ]]
+}
+
+download_mirror_asset_available() {
+  local asset_name="$1"
+  local status
+  if status="$(curl --silent --show-error --location --head \
+      --connect-timeout 30 --max-time 120 \
+      --retry 3 --retry-all-errors \
+      --output /dev/null --write-out '%{http_code}' \
+      "$download_mirror_base/releases/download/$requested_tag/$asset_name")"; then
+    [[ "$status" == "200" ]]
+  else
+    return 1
+  fi
+}
+
 gitee_release_exists=false
 gitee_release_id=""
 
@@ -198,8 +231,31 @@ else
       ;;
   esac
 
+  if [[ "$gitee_release_exists" == "true" &&
+    ("$requested_asset" == "SHA256SUMS" || "$requested_asset" == "all") ]]; then
+    echo "Updating Gitee release metadata and official mirror links..."
+    update_status="$(gitee_request PATCH \
+      "/repos/$gitee_owner/$gitee_repository/releases/$gitee_release_id" \
+      "$work_dir/gitee-update-response.json" \
+      --data-urlencode "tag_name=$requested_tag" \
+      --data-urlencode "name=$release_name" \
+      --data-urlencode "body@$gitee_release_body" \
+      --data-urlencode "prerelease=$prerelease")"
+
+    if [[ ! "$update_status" =~ ^2 ]]; then
+      jq -r '.message // .' "$work_dir/gitee-update-response.json" >&2 || true
+      die "could not update Gitee release metadata (HTTP $update_status)"
+    fi
+  fi
+
   while IFS= read -r asset_name; do
-    if ! attachment_exists "$asset_name"; then
+    if is_download_mirror_only_asset "$asset_name"; then
+      if download_mirror_asset_available "$asset_name"; then
+        echo "Available from official download mirror: $asset_name"
+      else
+        die "official download mirror is not ready for $asset_name"
+      fi
+    elif ! attachment_exists "$asset_name"; then
       printf '%s\n' "$asset_name" >>"$download_list"
     fi
   done <"$sync_list"
@@ -281,7 +337,7 @@ if [[ "$gitee_release_exists" != "true" ]]; then
   create_status="$(gitee_request POST "$create_path" "$create_response" \
     --data-urlencode "tag_name=$requested_tag" \
     --data-urlencode "name=$release_name" \
-    --data-urlencode "body@$release_body" \
+    --data-urlencode "body@$gitee_release_body" \
     --data-urlencode "target_commitish=$target_commitish" \
     --data-urlencode "prerelease=$prerelease")"
 
@@ -349,7 +405,12 @@ done < <(find "$assets_dir" -maxdepth 1 -type f -print0)
 
 missing_assets=0
 while IFS= read -r asset_name; do
-  if ! attachment_exists "$asset_name"; then
+  if is_download_mirror_only_asset "$asset_name"; then
+    if ! download_mirror_asset_available "$asset_name"; then
+      echo "Missing from official download mirror: $asset_name" >&2
+      missing_assets=$((missing_assets + 1))
+    fi
+  elif ! attachment_exists "$asset_name"; then
     echo "Missing after upload: $asset_name" >&2
     missing_assets=$((missing_assets + 1))
   fi
